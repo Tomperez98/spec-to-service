@@ -71,7 +71,10 @@ public static class BankSpec
 
                 if (balance != 0)
                     return Expect
-                        .That<CloseAccountResponse>(r => r is CloseAccountResponse.NonZeroBalance { Balance: var b } && b == balance)
+                        .That<CloseAccountResponse>(r =>
+                            r is CloseAccountResponse.NonZeroBalance { Balance: var b }
+                            && b == balance
+                        )
                         .SameState();
 
                 return Expect
@@ -90,7 +93,9 @@ public static class BankSpec
                         .SameState();
 
                 return Expect
-                    .That<GetBalanceResponse>(r => r is GetBalanceResponse.Ok { Balance: var b } && b == balance)
+                    .That<GetBalanceResponse>(r =>
+                        r is GetBalanceResponse.Ok { Balance: var b } && b == balance
+                    )
                     .SameState();
             }
         );
@@ -127,7 +132,9 @@ public static class BankSpec
                 var newToBalance = state.Accounts[req.ToAccountId] + req.Amount;
                 return Expect
                     .That<TransferResponse>(
-                        r => r is TransferResponse.Ok { FromNewBalance: var b } && b == newFromBalance,
+                        r =>
+                            r is TransferResponse.Ok { FromNewBalance: var b }
+                            && b == newFromBalance,
                         $"Should return Ok with source balance {newFromBalance}"
                     )
                     .ThenState<BankState>(s =>

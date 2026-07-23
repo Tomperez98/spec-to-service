@@ -10,8 +10,8 @@ check:
 lint:
     dotnet format --verify-no-changes
 
-test:
-    dotnet test
+test filter='':
+    dotnet test --filter "{{filter}}"
 
 restore:
     dotnet restore
