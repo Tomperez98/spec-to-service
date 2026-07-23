@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/cli/">
+    <Project Path="cli/Cli.csproj" />
+  </Folder>
+  <Folder Name="/model/">
+    <Project Path="model/Model.csproj" />
+  </Folder>
+</Solution>
