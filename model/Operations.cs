@@ -1,5 +1,14 @@
 namespace Model;
 
+public record CreateAccountRequest();
+
+public abstract record CreateAccountResponse
+{
+    private CreateAccountResponse() { }
+
+    public sealed record Ok(string AccountId) : CreateAccountResponse;
+}
+
 public record DepositRequest(string AccountId, decimal Amount);
 
 public abstract record DepositResponse
@@ -7,6 +16,8 @@ public abstract record DepositResponse
     private DepositResponse() { }
 
     public sealed record Ok(decimal NewBalance) : DepositResponse;
+
+    public sealed record NotFound : DepositResponse;
 }
 
 public record WithdrawRequest(string AccountId, decimal Amount);

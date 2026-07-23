@@ -78,14 +78,14 @@ public class ModelSmokeTests
             new DepositResponse.Ok(100m),
             state
         );
-        Assert.True(valid);
+        Assert.False(valid);
     }
 
     [Fact]
     public void Deposit_existing_account_adds_to_balance()
     {
         var spec = BankSpec.Create();
-        var state = new BankState { Accounts = { ["alice"] = 100m } };
+        var state = new BankState { Accounts = [new Account { Id = "alice", Balance = 100m }] };
         var (valid, _, _) = spec.Allows(
             spec.GetOperation("Deposit"),
             new DepositRequest("alice", 50m),
@@ -113,7 +113,7 @@ public class ModelSmokeTests
     public void Withdraw_insufficient_funds_rejected()
     {
         var spec = BankSpec.Create();
-        var state = new BankState { Accounts = { ["alice"] = 30m } };
+        var state = new BankState { Accounts = [new Account { Id = "alice", Balance = 30m }] };
         var (valid, _, _) = spec.Allows(
             spec.GetOperation("Withdraw"),
             new WithdrawRequest("alice", 100m),
@@ -126,7 +126,7 @@ public class ModelSmokeTests
     [Fact]
     public void Withdraw_ok_when_sufficient_funds()
     {
-        var state = new BankState { Accounts = { ["alice"] = 100m } };
+        var state = new BankState { Accounts = [new Account { Id = "alice", Balance = 100m }] };
         var spec = BankSpec.Create();
         var (valid, _, _) = spec.Allows(
             spec.GetOperation("Withdraw"),
@@ -154,7 +154,7 @@ public class ModelSmokeTests
     [Fact]
     public void GetBalance_ok_when_account_exists()
     {
-        var state = new BankState { Accounts = { ["alice"] = 75m } };
+        var state = new BankState { Accounts = [new Account { Id = "alice", Balance = 75m }] };
         var spec = BankSpec.Create();
         var (valid, _, _) = spec.Allows(
             spec.GetOperation("GetBalance"),
@@ -169,7 +169,7 @@ public class ModelSmokeTests
     public void Transfer_source_not_found()
     {
         var spec = BankSpec.Create();
-        var state = new BankState { Accounts = { ["bob"] = 100m } };
+        var state = new BankState { Accounts = [new Account { Id = "bob", Balance = 100m }] };
         var (valid, _, _) = spec.Allows(
             spec.GetOperation("Transfer"),
             new TransferRequest("alice", "bob", 50m),
@@ -182,7 +182,7 @@ public class ModelSmokeTests
     [Fact]
     public void Transfer_target_not_found()
     {
-        var state = new BankState { Accounts = { ["alice"] = 100m } };
+        var state = new BankState { Accounts = [new Account { Id = "alice", Balance = 100m }] };
         var spec = BankSpec.Create();
         var (valid, _, _) = spec.Allows(
             spec.GetOperation("Transfer"),
@@ -197,7 +197,7 @@ public class ModelSmokeTests
     public void Transfer_insufficient_funds()
     {
         var spec = BankSpec.Create();
-        var state = new BankState { Accounts = { ["alice"] = 30m, ["bob"] = 50m } };
+        var state = new BankState { Accounts = [new Account { Id = "alice", Balance = 30m }, new Account { Id = "bob", Balance = 50m }] };
         var (valid, _, _) = spec.Allows(
             spec.GetOperation("Transfer"),
             new TransferRequest("alice", "bob", 100m),
@@ -210,7 +210,7 @@ public class ModelSmokeTests
     [Fact]
     public void Transfer_ok_moves_funds()
     {
-        var state = new BankState { Accounts = { ["alice"] = 100m, ["bob"] = 50m } };
+        var state = new BankState { Accounts = [new Account { Id = "alice", Balance = 100m }, new Account { Id = "bob", Balance = 50m }] };
         var spec = BankSpec.Create();
         var (valid, _, _) = spec.Allows(
             spec.GetOperation("Transfer"),
@@ -238,7 +238,7 @@ public class ModelSmokeTests
     [Fact]
     public void CloseAccount_non_zero_balance()
     {
-        var state = new BankState { Accounts = { ["alice"] = 50m } };
+        var state = new BankState { Accounts = [new Account { Id = "alice", Balance = 50m }] };
         var spec = BankSpec.Create();
         var (valid, _, _) = spec.Allows(
             spec.GetOperation("CloseAccount"),
@@ -253,7 +253,7 @@ public class ModelSmokeTests
     public void CloseAccount_ok_when_zero_balance()
     {
         var spec = BankSpec.Create();
-        var state = new BankState { Accounts = { ["alice"] = 0m } };
+        var state = new BankState { Accounts = [new Account { Id = "alice", Balance = 0m }] };
         var (valid, _, _) = spec.Allows(
             spec.GetOperation("CloseAccount"),
             new CloseAccountRequest("alice"),
