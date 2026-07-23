@@ -4,54 +4,140 @@ namespace Model;
 
 public static class BankSpec
 {
-    public static List<IStepFunction> CreateStepFunctions()
+    public static Spec<BankState> Create()
     {
-        var deposit = new ContractStepFunction(
-            new DepositRequest("account-1", 100m),
-            new DepositResponse.Ok(100m),
-            (request, state, response) =>
+        var spec = new Spec<BankState>().WithJsonPrinters();
+
+        spec.Operation<DepositRequest, DepositResponse>(
+            "Deposit",
+            (req, state) =>
             {
-                var r = (DepositRequest)request;
-                var s = (BankState)state;
-                var balance = s.Accounts.GetValueOrDefault(r.AccountId, 0m);
-                var expected = balance + r.Amount;
+                if (!state.Accounts.TryGetValue(req.AccountId, out var balance))
+                    return Expect
+                        .That<DepositResponse>(
+                            r => r is DepositResponse.Ok { NewBalance: var b } && b == req.Amount,
+                            "Missing account: should auto-create with deposited amount"
+                        )
+                        .ThenState<BankState>(s => s.Accounts[req.AccountId] = req.Amount);
 
-                if (response is DepositResponse.Ok ok && ok.NewBalance == expected)
-                {
-                    var next = (BankState)s.Clone();
-                    next.Accounts[r.AccountId] = expected;
-                    return (true, new StateProfile(next));
-                }
-
-                return (false, new StateProfile(s));
+                var newBalance = balance + req.Amount;
+                return Expect
+                    .That<DepositResponse>(
+                        r => r is DepositResponse.Ok { NewBalance: var b } && b == newBalance,
+                        $"Should return Ok with balance {newBalance}"
+                    )
+                    .ThenState<BankState>(s => s.Accounts[req.AccountId] = newBalance);
             }
         );
 
-        var withdraw = new ContractStepFunction(
-            new WithdrawRequest("account-1", 50m),
-            new WithdrawResponse.Ok(50m),
-            (request, state, response) =>
+        spec.Operation<WithdrawRequest, WithdrawResponse>(
+            "Withdraw",
+            (req, state) =>
             {
-                var r = (WithdrawRequest)request;
-                var s = (BankState)state;
+                if (!state.Accounts.TryGetValue(req.AccountId, out var balance))
+                    return Expect
+                        .That<WithdrawResponse>(
+                            r => r is WithdrawResponse.NotFound,
+                            "Account not found"
+                        )
+                        .SameState();
 
-                if (!s.Accounts.TryGetValue(r.AccountId, out var balance))
-                    return (response is WithdrawResponse.NotFound, new StateProfile(s));
+                if (balance < req.Amount)
+                    return Expect
+                        .That<WithdrawResponse>(
+                            r => r is WithdrawResponse.InsufficientFunds,
+                            "Insufficient funds"
+                        )
+                        .SameState();
 
-                if (balance < r.Amount)
-                    return (response is WithdrawResponse.InsufficientFunds, new StateProfile(s));
-
-                if (response is WithdrawResponse.Ok ok && ok.NewBalance == balance - r.Amount)
-                {
-                    var next = (BankState)s.Clone();
-                    next.Accounts[r.AccountId] = ok.NewBalance;
-                    return (true, new StateProfile(next));
-                }
-
-                return (false, new StateProfile(s));
+                var newBalance = balance - req.Amount;
+                return Expect
+                    .That<WithdrawResponse>(
+                        r => r is WithdrawResponse.Ok { NewBalance: var b } && b == newBalance,
+                        $"Should return Ok with balance {newBalance}"
+                    )
+                    .ThenState<BankState>(s => s.Accounts[req.AccountId] = newBalance);
             }
         );
 
-        return new List<IStepFunction> { deposit, withdraw };
+        spec.Operation<CloseAccountRequest, CloseAccountResponse>(
+            "CloseAccount",
+            (req, state) =>
+            {
+                if (!state.Accounts.TryGetValue(req.AccountId, out var balance))
+                    return Expect
+                        .That<CloseAccountResponse>(r => r is CloseAccountResponse.NotFound)
+                        .SameState();
+
+                if (balance != 0)
+                    return Expect
+                        .That<CloseAccountResponse>(r => r is CloseAccountResponse.NonZeroBalance { Balance: var b } && b == balance)
+                        .SameState();
+
+                return Expect
+                    .That<CloseAccountResponse>(r => r is CloseAccountResponse.Ok)
+                    .ThenState<BankState>(s => s.Accounts.Remove(req.AccountId));
+            }
+        );
+
+        spec.Operation<GetBalanceRequest, GetBalanceResponse>(
+            "GetBalance",
+            (req, state) =>
+            {
+                if (!state.Accounts.TryGetValue(req.AccountId, out var balance))
+                    return Expect
+                        .That<GetBalanceResponse>(r => r is GetBalanceResponse.NotFound)
+                        .SameState();
+
+                return Expect
+                    .That<GetBalanceResponse>(r => r is GetBalanceResponse.Ok { Balance: var b } && b == balance)
+                    .SameState();
+            }
+        );
+
+        spec.Operation<TransferRequest, TransferResponse>(
+            "Transfer",
+            (req, state) =>
+            {
+                if (!state.Accounts.TryGetValue(req.FromAccountId, out var fromBalance))
+                    return Expect
+                        .That<TransferResponse>(
+                            r => r is TransferResponse.SourceNotFound,
+                            "Source account not found"
+                        )
+                        .SameState();
+
+                if (!state.Accounts.ContainsKey(req.ToAccountId))
+                    return Expect
+                        .That<TransferResponse>(
+                            r => r is TransferResponse.TargetNotFound,
+                            "Target account not found"
+                        )
+                        .SameState();
+
+                if (fromBalance < req.Amount)
+                    return Expect
+                        .That<TransferResponse>(
+                            r => r is TransferResponse.InsufficientFunds,
+                            "Insufficient funds"
+                        )
+                        .SameState();
+
+                var newFromBalance = fromBalance - req.Amount;
+                var newToBalance = state.Accounts[req.ToAccountId] + req.Amount;
+                return Expect
+                    .That<TransferResponse>(
+                        r => r is TransferResponse.Ok { FromNewBalance: var b } && b == newFromBalance,
+                        $"Should return Ok with source balance {newFromBalance}"
+                    )
+                    .ThenState<BankState>(s =>
+                    {
+                        s.Accounts[req.FromAccountId] = newFromBalance;
+                        s.Accounts[req.ToAccountId] = newToBalance;
+                    });
+            }
+        );
+
+        return spec;
     }
 }
