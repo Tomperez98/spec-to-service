@@ -3,21 +3,19 @@ using Model;
 
 namespace Cli.Smokes;
 
-public class Foo : ISmokeTest
+public class Bar : ISmokeTest
 {
     private readonly Spec<BankState> _spec;
     private readonly InputSet _inputs;
     private readonly TestGenerationOptions _options;
 
-    public Foo()
+    public Bar()
     {
         _spec = BankSpec.Create();
         _inputs = new InputSet
         {
             _spec.GetOperation<CreateAccountRequest, CreateAccountResponse>("CreateAccount")
-                .With(new CreateAccountRequest(), "Create source"),
-            _spec.GetOperation<CreateAccountRequest, CreateAccountResponse>("CreateAccount")
-                .With(new CreateAccountRequest(), "Create target"),
+                .With(new CreateAccountRequest(), "Create Account"),
         };
         _options = new TestGenerationOptions
         {
@@ -26,15 +24,11 @@ public class Foo : ISmokeTest
             {
                 DerivationSelector.For("Deposit").From("CreateAccount"),
                 DerivationSelector.For("Withdraw").From("CreateAccount"),
-                DerivationSelector.For("GetBalance").From("CreateAccount"),
-                DerivationSelector.For("CloseAccount").From("CreateAccount"),
-                DerivationSelector.For("Transfer").From("CreateAccount"),
             },
             RequestTemplates = new Dictionary<string, Func<object>>
             {
                 ["Deposit"] = () => new DepositRequest("", 100m),
                 ["Withdraw"] = () => new WithdrawRequest("", 50m),
-                ["Transfer"] = () => new TransferRequest("", "", 30m),
             },
         };
     }

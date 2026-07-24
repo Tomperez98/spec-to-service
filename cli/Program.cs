@@ -38,36 +38,37 @@ return await root.InvokeAsync(args);
 
 static int RunSmoke(string name, bool visualize)
 {
-    var type =
-        Type.GetType($"Cli.Smokes.{name}", throwOnError: false)
-        ?? DiscoverSmokes()
-            .FirstOrDefault(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    var type = DiscoverSmokes()
+        .FirstOrDefault(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     if (type is null)
-        return ReportUnknown(name);
-
-    try
     {
-        var testCases = InvokeRun(type);
-
-        if (testCases.Count == 0)
-            throw new Exception("Expected non-empty test cases");
-
-        if (!testCases.Any(tc => tc.OperationCalls.Count > 1))
-            throw new Exception("Expected at least one test case with >1 operation call");
-
-        Console.WriteLine($"  PASS — {type.Name}: {testCases.Count} test cases");
-
-        if (visualize)
-            Visualize(testCases, name);
-
-        return 0;
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"  FAIL — {type.Name}: {ex.Message}");
+        Console.WriteLine($"Unknown smoke test: {name}");
         return 1;
     }
+
+    var smoke = (ISmokeTest)Activator.CreateInstance(type)!;
+    var testCases = smoke.GenerateTests();
+
+    if (testCases.Count == 0)
+        throw new InvalidOperationException("Expected non-empty test cases");
+
+    if (!testCases.Any(tc => tc.OperationCalls.Count > 1))
+        throw new InvalidOperationException("Expected at least one test case with >1 operation call");
+
+    Console.WriteLine($"  PASS — {type.Name}: {testCases.Count} test cases");
+
+    if (visualize)
+    {
+        var dotPath = Path.Combine(
+            Path.GetTempPath(),
+            $"smoke{name}-{DateTime.Now:yyyyMMdd-HHmmss}.dot"
+        );
+        File.WriteAllText(dotPath, smoke.VisualizeStateSpace());
+        Console.WriteLine($"  DOT graph written to {dotPath}");
+    }
+
+    return 0;
 }
 
 static Type[] DiscoverSmokes() =>
@@ -81,22 +82,3 @@ static Type[] DiscoverSmokes() =>
             && t.IsAssignableTo(typeof(ISmokeTest))
         )
         .ToArray();
-
-static IList<SequentialTestCase> InvokeRun(Type type) =>
-    (IList<SequentialTestCase>)type.GetMethod("Run")!.Invoke(null, null)!;
-
-static void Visualize(IList<SequentialTestCase> testCases, string name)
-{
-    var dotPath = Path.Combine(
-        Path.GetTempPath(),
-        $"smoke{name}-{DateTime.Now:yyyyMMdd-HHmmss}.dot"
-    );
-    File.WriteAllText(dotPath, testCases.ToString() ?? "");
-    Console.WriteLine($"  DOT graph written to {dotPath}");
-}
-
-static int ReportUnknown(string name)
-{
-    Console.WriteLine($"Unknown smoke test: {name}");
-    return 1;
-}
