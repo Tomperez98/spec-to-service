@@ -45,7 +45,6 @@ public class UnitTests
         Assert.True(create.IsValid, create.Message);
         // Thread the new state forward via the returned StateProfile.
 
-
         // 2. Deposit against the freshly-created ID.
         var deposit = spec.Allows(
             spec.GetOperation("Deposit"),

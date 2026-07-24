@@ -8,37 +8,30 @@ public static class BankSpec
     {
         var spec = new Spec<BankState>().WithJsonPrinters();
 
-        // Shared account-creation logic. Both CreateAccount and
-        // CreateTargetAccount use the same Apply semantics; only the operation
-        // name differs so the generator treats them as independent seeds for
-        // cross-account Transfer.
-        ExpectedOutcomes CreateAccountHandler(
-            CreateAccountRequest req, BankState state) =>
-            Expect
-                .That<CreateAccountResponse>(
-                    r =>
-                        r is CreateAccountResponse.Ok { AccountId: var id }
-                        && !string.IsNullOrWhiteSpace(id)
-                        && !state.Accounts.Any(a => a.Id == id),
-                    "Should return Ok with a fresh, non-empty AccountId"
-                )
-                .ThenState<BankState>(
-                    (resp, s) =>
-                    {
-                        var id = ((CreateAccountResponse.Ok)resp).AccountId;
-                        s.Accounts.Add(new Account { Id = id, Balance = 0 });
-                        Invariant.Assert(
-                            s.Accounts.Select(a => a.Id).Distinct().Count() == s.Accounts.Count,
-                            "duplicate account IDs");
-                    },
-                    mock: () => new CreateAccountResponse.Ok(Guid.NewGuid().ToString())
-                );
-
         spec.Operation<CreateAccountRequest, CreateAccountResponse>(
-            "CreateAccount", CreateAccountHandler);
-
-        spec.Operation<CreateAccountRequest, CreateAccountResponse>(
-            "CreateTargetAccount", CreateAccountHandler);
+            "CreateAccount",
+            (req, state) =>
+                Expect
+                    .That<CreateAccountResponse>(
+                        r =>
+                            r is CreateAccountResponse.Ok { AccountId: var id }
+                            && !string.IsNullOrWhiteSpace(id)
+                            && !state.Accounts.Any(a => a.Id == id),
+                        "Should return Ok with a fresh, non-empty AccountId"
+                    )
+                    .ThenState<BankState>(
+                        (resp, s) =>
+                        {
+                            var id = ((CreateAccountResponse.Ok)resp).AccountId;
+                            s.Accounts.Add(new Account { Id = id, Balance = 0 });
+                            Invariant.Assert(
+                                s.Accounts.Select(a => a.Id).Distinct().Count() == s.Accounts.Count,
+                                "duplicate account IDs"
+                            );
+                        },
+                        mock: () => new CreateAccountResponse.Ok(Guid.NewGuid().ToString())
+                    )
+        );
 
         spec.Operation<DepositRequest, DepositResponse>(
             "Deposit",
@@ -64,7 +57,8 @@ public static class BankSpec
                         s.Accounts[idx] = new Account { Id = req.AccountId, Balance = newBalance };
                         Invariant.Assert(
                             s.Accounts.All(a => a.Balance >= 0),
-                            "balance must be non-negative");
+                            "balance must be non-negative"
+                        );
                     });
             }
         );
@@ -102,7 +96,8 @@ public static class BankSpec
                         s.Accounts[idx] = new Account { Id = req.AccountId, Balance = newBalance };
                         Invariant.Assert(
                             s.Accounts.All(a => a.Balance >= 0),
-                            "balance must be non-negative");
+                            "balance must be non-negative"
+                        );
                     });
             }
         );
@@ -133,7 +128,8 @@ public static class BankSpec
                         s.Accounts.RemoveAt(idx);
                         Invariant.Assert(
                             s.Accounts.All(a => a.Id != req.AccountId),
-                            $"CloseAccount: account {req.AccountId} still present after removal");
+                            $"CloseAccount: account {req.AccountId} still present after removal"
+                        );
                     });
             }
         );
@@ -178,6 +174,14 @@ public static class BankSpec
                         )
                         .SameState();
 
+                if (fromIdx == toIdx)
+                    return Expect
+                        .That<TransferResponse>(
+                            r => r is TransferResponse.SameAccount,
+                            "Cannot transfer to same account"
+                        )
+                        .SameState();
+
                 if (state.Accounts[fromIdx].Balance < req.Amount)
                     return Expect
                         .That<TransferResponse>(
@@ -186,12 +190,8 @@ public static class BankSpec
                         )
                         .SameState();
 
-                var newFromBalance = fromIdx == toIdx
-                    ? state.Accounts[fromIdx].Balance // net zero for same-account
-                    : state.Accounts[fromIdx].Balance - req.Amount;
-                var newToBalance = fromIdx == toIdx
-                    ? state.Accounts[toIdx].Balance
-                    : state.Accounts[toIdx].Balance + req.Amount;
+                var newFromBalance = state.Accounts[fromIdx].Balance - req.Amount;
+                var newToBalance = state.Accounts[toIdx].Balance + req.Amount;
                 return Expect
                     .That<TransferResponse>(
                         r =>
@@ -207,18 +207,19 @@ public static class BankSpec
                             Id = req.FromAccountId,
                             Balance = newFromBalance,
                         };
-                        if (fromIdx != toIdx)
-                            s.Accounts[toIdx] = new Account
-                            {
-                                Id = req.ToAccountId,
-                                Balance = newToBalance,
-                            };
+                        s.Accounts[toIdx] = new Account
+                        {
+                            Id = req.ToAccountId,
+                            Balance = newToBalance,
+                        };
                         Invariant.Assert(
                             s.Accounts.All(a => a.Balance >= 0),
-                            "balance must be non-negative");
+                            "balance must be non-negative"
+                        );
                         Invariant.Assert(
                             s.Accounts.Sum(a => a.Balance) == totalBefore,
-                            $"Transfer changed total balance: {totalBefore} → {s.Accounts.Sum(a => a.Balance)}");
+                            $"Transfer changed total balance: {totalBefore} → {s.Accounts.Sum(a => a.Balance)}"
+                        );
                     });
             }
         );
@@ -226,63 +227,83 @@ public static class BankSpec
         // Derivations: thread server-generated account IDs from CreateAccount and
         // CreateTargetAccount into downstream ops so the generator can produce
         // non-trivial sequences.
-        spec.ConfigureDerivations("Deposit",
-            Derive.From<CreateAccountRequest, CreateAccountResponse, DepositRequest>("CreateAccount")
+        spec.ConfigureDerivations(
+            "Deposit",
+            Derive
+                .From<CreateAccountRequest, CreateAccountResponse, DepositRequest>("CreateAccount")
                 .When((_, resp) => resp is CreateAccountResponse.Ok)
-                .As((_, resp, template) => new DepositRequest(
-                    ((CreateAccountResponse.Ok)resp).AccountId, template.Amount)),
-            Derive.From<CreateAccountRequest, CreateAccountResponse, DepositRequest>("CreateTargetAccount")
-                .When((_, resp) => resp is CreateAccountResponse.Ok)
-                .As((_, resp, template) => new DepositRequest(
-                    ((CreateAccountResponse.Ok)resp).AccountId, template.Amount)));
+                .As(
+                    (_, resp, template) =>
+                        new DepositRequest(
+                            ((CreateAccountResponse.Ok)resp).AccountId,
+                            template.Amount
+                        )
+                )
+        );
 
-        spec.ConfigureDerivations("Withdraw",
-            Derive.From<CreateAccountRequest, CreateAccountResponse, WithdrawRequest>("CreateAccount")
+        spec.ConfigureDerivations(
+            "Withdraw",
+            Derive
+                .From<CreateAccountRequest, CreateAccountResponse, WithdrawRequest>("CreateAccount")
                 .When((_, resp) => resp is CreateAccountResponse.Ok)
-                .As((_, resp, template) => new WithdrawRequest(
-                    ((CreateAccountResponse.Ok)resp).AccountId, template.Amount)),
-            Derive.From<CreateAccountRequest, CreateAccountResponse, WithdrawRequest>("CreateTargetAccount")
-                .When((_, resp) => resp is CreateAccountResponse.Ok)
-                .As((_, resp, template) => new WithdrawRequest(
-                    ((CreateAccountResponse.Ok)resp).AccountId, template.Amount)));
+                .As(
+                    (_, resp, template) =>
+                        new WithdrawRequest(
+                            ((CreateAccountResponse.Ok)resp).AccountId,
+                            template.Amount
+                        )
+                )
+        );
 
-        spec.ConfigureDerivations("GetBalance",
-            Derive.From<CreateAccountRequest, CreateAccountResponse, GetBalanceRequest>("CreateAccount")
+        spec.ConfigureDerivations(
+            "GetBalance",
+            Derive
+                .From<CreateAccountRequest, CreateAccountResponse, GetBalanceRequest>(
+                    "CreateAccount"
+                )
                 .When((_, resp) => resp is CreateAccountResponse.Ok)
-                .As((_, resp) => new GetBalanceRequest(
-                    ((CreateAccountResponse.Ok)resp).AccountId)),
-            Derive.From<CreateAccountRequest, CreateAccountResponse, GetBalanceRequest>("CreateTargetAccount")
-                .When((_, resp) => resp is CreateAccountResponse.Ok)
-                .As((_, resp) => new GetBalanceRequest(
-                    ((CreateAccountResponse.Ok)resp).AccountId)));
+                .As((_, resp) => new GetBalanceRequest(((CreateAccountResponse.Ok)resp).AccountId))
+        );
 
-        spec.ConfigureDerivations("CloseAccount",
-            Derive.From<CreateAccountRequest, CreateAccountResponse, CloseAccountRequest>("CreateAccount")
+        spec.ConfigureDerivations(
+            "CloseAccount",
+            Derive
+                .From<CreateAccountRequest, CreateAccountResponse, CloseAccountRequest>(
+                    "CreateAccount"
+                )
                 .When((_, resp) => resp is CreateAccountResponse.Ok)
-                .As((_, resp) => new CloseAccountRequest(
-                    ((CreateAccountResponse.Ok)resp).AccountId)),
-            Derive.From<CreateAccountRequest, CreateAccountResponse, CloseAccountRequest>("CreateTargetAccount")
-                .When((_, resp) => resp is CreateAccountResponse.Ok)
-                .As((_, resp) => new CloseAccountRequest(
-                    ((CreateAccountResponse.Ok)resp).AccountId)));
+                .As(
+                    (_, resp) => new CloseAccountRequest(((CreateAccountResponse.Ok)resp).AccountId)
+                )
+        );
 
         // Transfer: each derivation fills its own field, preserving the other
         // from the template or prior derivation. The generator composes both.
-        spec.ConfigureDerivations("Transfer",
-            Derive.From<CreateAccountRequest, CreateAccountResponse, TransferRequest>("CreateAccount")
+        spec.ConfigureDerivations(
+            "Transfer",
+            Derive
+                .From<CreateAccountRequest, CreateAccountResponse, TransferRequest>("CreateAccount")
                 .When((_, resp) => resp is CreateAccountResponse.Ok)
-                .As((_, resp, template) =>
-                    new TransferRequest(
-                        ((CreateAccountResponse.Ok)resp).AccountId,
-                        template.ToAccountId,
-                        template.Amount)),
-            Derive.From<CreateAccountRequest, CreateAccountResponse, TransferRequest>("CreateTargetAccount")
+                .As(
+                    (_, resp, template) =>
+                        new TransferRequest(
+                            ((CreateAccountResponse.Ok)resp).AccountId,
+                            template.ToAccountId,
+                            template.Amount
+                        )
+                ),
+            Derive
+                .From<CreateAccountRequest, CreateAccountResponse, TransferRequest>("CreateAccount")
                 .When((_, resp) => resp is CreateAccountResponse.Ok)
-                .As((_, resp, template) =>
-                    new TransferRequest(
-                        template.FromAccountId,
-                        ((CreateAccountResponse.Ok)resp).AccountId,
-                        template.Amount)));
+                .As(
+                    (_, resp, template) =>
+                        new TransferRequest(
+                            template.FromAccountId,
+                            ((CreateAccountResponse.Ok)resp).AccountId,
+                            template.Amount
+                        )
+                )
+        );
 
         return spec;
     }

@@ -70,4 +70,6 @@ public abstract record TransferResponse
     public sealed record TargetNotFound : TransferResponse;
 
     public sealed record InsufficientFunds : TransferResponse;
+
+    public sealed record SameAccount : TransferResponse;
 }
