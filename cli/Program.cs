@@ -1,54 +1,54 @@
 using System.CommandLine;
 using System.Reflection;
-using Cli.Smokes;
+using Cli.Scenarios;
 using Microsoft.Accordant;
 
-var smokeNameArg = new Argument<string>("name", "Smoke test name (class name, case-insensitive)");
+var scenarioNameArg = new Argument<string>("name", "Scenario name (class name, case-insensitive)");
 var visualizeOption = new Option<bool>(
     "--visualize",
     () => false,
     "Write the DOT graph of the state space to a temp file"
 );
 
-var smokeCommand = new Command("smoke", "Run a smoke test by name")
+var scenarioCommand = new Command("scenario", "Run a test scenario by name")
 {
-    smokeNameArg,
+    scenarioNameArg,
     visualizeOption,
 };
-smokeCommand.SetHandler(
+scenarioCommand.SetHandler(
     (name, visualize) =>
     {
-        Environment.ExitCode = RunSmoke(name, visualize);
+        Environment.ExitCode = RunScenario(name, visualize);
     },
-    smokeNameArg,
+    scenarioNameArg,
     visualizeOption
 );
 
-var listCommand = new Command("list", "List available smoke tests");
+var listCommand = new Command("list", "List available test scenarios");
 listCommand.SetHandler(() =>
 {
-    foreach (var t in DiscoverSmokes())
+    foreach (var t in DiscoverScenarios())
         Console.WriteLine($"  {t.Name}");
 });
-smokeCommand.Add(listCommand);
+scenarioCommand.Add(listCommand);
 
-var root = new RootCommand("Accordant smoke test runner") { smokeCommand };
+var root = new RootCommand("Accordant test scenario runner") { scenarioCommand };
 
 return await root.InvokeAsync(args);
 
-static int RunSmoke(string name, bool visualize)
+static int RunScenario(string name, bool visualize)
 {
-    var type = DiscoverSmokes()
+    var type = DiscoverScenarios()
         .FirstOrDefault(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     if (type is null)
     {
-        Console.WriteLine($"Unknown smoke test: {name}");
+        Console.WriteLine($"Unknown scenario: {name}");
         return 1;
     }
 
-    var smoke = (ISmokeTest)Activator.CreateInstance(type)!;
-    var testCases = smoke.GenerateTests();
+    var scenario = (ITestScenario)Activator.CreateInstance(type)!;
+    var testCases = scenario.GenerateTests();
 
     if (testCases.Count == 0)
         throw new InvalidOperationException("Expected non-empty test cases");
@@ -62,23 +62,23 @@ static int RunSmoke(string name, bool visualize)
     {
         var dotPath = Path.Combine(
             Path.GetTempPath(),
-            $"smoke{name}-{DateTime.Now:yyyyMMdd-HHmmss}.dot"
+            $"scenario-{name}-{DateTime.Now:yyyyMMdd-HHmmss}.dot"
         );
-        File.WriteAllText(dotPath, smoke.VisualizeStateSpace());
+        File.WriteAllText(dotPath, scenario.VisualizeStateSpace());
         Console.WriteLine($"  DOT graph written to {dotPath}");
     }
 
     return 0;
 }
 
-static Type[] DiscoverSmokes() =>
+static Type[] DiscoverScenarios() =>
     Assembly
         .GetExecutingAssembly()
         .GetTypes()
         .Where(t =>
-            t.Namespace == "Cli.Smokes"
+            t.Namespace == "Cli.Scenarios"
             && !t.IsInterface
             && !t.IsAbstract
-            && t.IsAssignableTo(typeof(ISmokeTest))
+            && t.IsAssignableTo(typeof(ITestScenario))
         )
         .ToArray();

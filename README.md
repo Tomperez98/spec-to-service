@@ -12,11 +12,18 @@ Powered by [Microsoft Accordant](https://github.com/microsoft/accordant).
 ├── model/                  # The behavioral specification
 │   ├── Model.csproj
 │   ├── State.cs            # BankState — what the system remembers
-│   ├── Operations.cs        # Request/response types for each operation
+│   ├── Operations.cs       # Request/response types for each operation
 │   └── Spec.cs             # Expect.That rules per operation
 ├── cli/                    # CLI entry point (references Model)
 │   ├── Cli.csproj
-│   └── Program.cs
+│   ├── Program.cs
+│   ├── ITestScenario.cs    # Test scenario interface
+│   └── scenarios/          # Test scenario implementations
+│       ├── foo.cs
+│       └── bar.cs
+├── tests/                  # Unit tests
+│   ├── Tests.csproj
+│   └── UnitTests.cs
 ├── spec-to-service.slnx
 ├── justfile                # Build/test/lint/format commands
 │

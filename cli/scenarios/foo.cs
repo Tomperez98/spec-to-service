@@ -1,9 +1,9 @@
 using Microsoft.Accordant;
 using Model;
 
-namespace Cli.Smokes;
+namespace Cli.Scenarios;
 
-public class Foo : ISmokeTest
+public class Foo : ITestScenario
 {
     private readonly Spec<BankState> _spec;
     private readonly InputSet _inputs;
