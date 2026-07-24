@@ -1,11 +1,11 @@
 <Solution>
-  <Folder Name="/cli/">
-    <Project Path="cli/Cli.csproj" />
+  <Folder Name="/Spec/Cli/">
+  <Project Path="Spec/Cli/Cli.csproj" />
   </Folder>
-  <Folder Name="/model/">
-    <Project Path="model/Model.csproj" />
+  <Folder Name="/Spec/Model/">
+    <Project Path="Spec/Model/Model.csproj" />
   </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/Tests.csproj" />
+  <Folder Name="/Spec/Tests/">
+    <Project Path="Spec/Tests/Tests.csproj" />
   </Folder>
 </Solution>

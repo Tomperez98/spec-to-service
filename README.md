@@ -9,21 +9,22 @@ Powered by [Microsoft Accordant](https://github.com/microsoft/accordant).
 ## Project Structure
 
 ```
-├── model/                  # The behavioral specification
-│   ├── Model.csproj
-│   ├── State.cs            # BankState — what the system remembers
-│   ├── Operations.cs       # Request/response types for each operation
-│   └── Spec.cs             # Expect.That rules per operation
-├── cli/                    # CLI entry point (references Model)
-│   ├── Cli.csproj
-│   ├── Program.cs
-│   ├── ITestScenario.cs    # Test scenario interface
-│   └── scenarios/          # Test scenario implementations
-│       ├── foo.cs
-│       └── bar.cs
-├── tests/                  # Unit tests
-│   ├── Tests.csproj
-│   └── UnitTests.cs
+├── Spec/
+│   ├── Model/              # The behavioral specification
+│   │   ├── Model.csproj
+│   │   ├── State.cs        # BankState — what the system remembers
+│   │   ├── Operations.cs   # Request/response types for each operation
+│   │   └── Spec.cs         # Expect.That rules per operation
+│   ├── Cli/                # CLI entry point (references Model)
+│   │   ├── Cli.csproj
+│   │   ├── Program.cs
+│   │   ├── ITestScenario.cs    # Test scenario interface
+│   │   └── Scenarios/      # Test scenario implementations
+│   │       ├── Foo.cs
+│   │       └── Bar.cs
+│   └── Tests/              # Unit tests
+│       ├── Tests.csproj
+│       └── UnitTests.cs
 ├── spec-to-service.slnx
 ├── justfile                # Build/test/lint/format commands
 │
@@ -71,7 +72,7 @@ dotnet restore
 dotnet build
 
 # Run CLI
-dotnet run --project cli
+dotnet run --project Spec/Cli
 ```
 
 ## Resources
