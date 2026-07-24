@@ -134,24 +134,6 @@ public static class BankSpec
             }
         );
 
-        spec.Operation<GetBalanceRequest, GetBalanceResponse>(
-            "GetBalance",
-            (req, state) =>
-            {
-                var account = state.Accounts.Find(a => a.Id == req.AccountId);
-                if (account == null)
-                    return Expect
-                        .That<GetBalanceResponse>(r => r is GetBalanceResponse.NotFound)
-                        .SameState();
-
-                return Expect
-                    .That<GetBalanceResponse>(r =>
-                        r is GetBalanceResponse.Ok { Balance: var b } && b == account.Balance
-                    )
-                    .SameState();
-            }
-        );
-
         spec.Operation<TransferRequest, TransferResponse>(
             "Transfer",
             (req, state) =>
@@ -253,16 +235,6 @@ public static class BankSpec
                             template.Amount
                         )
                 )
-        );
-
-        spec.ConfigureDerivations(
-            "GetBalance",
-            Derive
-                .From<CreateAccountRequest, CreateAccountResponse, GetBalanceRequest>(
-                    "CreateAccount"
-                )
-                .When((_, resp) => resp is CreateAccountResponse.Ok)
-                .As((_, resp) => new GetBalanceRequest(((CreateAccountResponse.Ok)resp).AccountId))
         );
 
         spec.ConfigureDerivations(

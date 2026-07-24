@@ -14,9 +14,11 @@ public class Foo : ITestScenario
         _spec = BankSpec.Create();
         _inputs = new InputSet
         {
-            _spec.GetOperation<CreateAccountRequest, CreateAccountResponse>("CreateAccount")
+            _spec
+                .GetOperation<CreateAccountRequest, CreateAccountResponse>("CreateAccount")
                 .With(new CreateAccountRequest(), "Create source"),
-            _spec.GetOperation<CreateAccountRequest, CreateAccountResponse>("CreateAccount")
+            _spec
+                .GetOperation<CreateAccountRequest, CreateAccountResponse>("CreateAccount")
                 .With(new CreateAccountRequest(), "Create target"),
         };
         _options = new TestGenerationOptions

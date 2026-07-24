@@ -1,6 +1,6 @@
 <Solution>
   <Folder Name="/Spec/Cli/">
-  <Project Path="Spec/Cli/Cli.csproj" />
+    <Project Path="Spec/Cli/Cli.csproj" />
   </Folder>
   <Folder Name="/Spec/Model/">
     <Project Path="Spec/Model/Model.csproj" />

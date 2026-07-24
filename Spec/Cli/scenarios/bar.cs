@@ -14,7 +14,8 @@ public class Bar : ITestScenario
         _spec = BankSpec.Create();
         _inputs = new InputSet
         {
-            _spec.GetOperation<CreateAccountRequest, CreateAccountResponse>("CreateAccount")
+            _spec
+                .GetOperation<CreateAccountRequest, CreateAccountResponse>("CreateAccount")
                 .With(new CreateAccountRequest(), "Create Account"),
         };
         _options = new TestGenerationOptions

@@ -54,7 +54,9 @@ static int RunScenario(string name, bool visualize)
         throw new InvalidOperationException("Expected non-empty test cases");
 
     if (!testCases.Any(tc => tc.OperationCalls.Count > 1))
-        throw new InvalidOperationException("Expected at least one test case with >1 operation call");
+        throw new InvalidOperationException(
+            "Expected at least one test case with >1 operation call"
+        );
 
     Console.WriteLine($"  PASS — {type.Name}: {testCases.Count} test cases");
 

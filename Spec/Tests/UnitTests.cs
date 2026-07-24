@@ -54,15 +54,6 @@ public class UnitTests
         );
         Assert.True(deposit.IsValid, deposit.Message);
         state = (BankState)deposit.UpdatedStateProfile.SingleState();
-
-        // 3. GetBalance reflects the deposit.
-        var balance = spec.Allows(
-            spec.GetOperation("GetBalance"),
-            new GetBalanceRequest(newId),
-            new GetBalanceResponse.Ok(100m),
-            state
-        );
-        Assert.True(balance.IsValid, balance.Message);
     }
 
     // Rejection case: predicate demands a fresh ID, so reusing an existing one fails.
@@ -131,34 +122,6 @@ public class UnitTests
             spec.GetOperation("Withdraw"),
             new WithdrawRequest("alice", 40m),
             new WithdrawResponse.Ok(60m),
-            state
-        );
-        Assert.True(valid);
-    }
-
-    [Fact]
-    public void GetBalance_not_found_when_account_missing()
-    {
-        var spec = BankSpec.Create();
-        var state = new BankState();
-        var (valid, _, _) = spec.Allows(
-            spec.GetOperation("GetBalance"),
-            new GetBalanceRequest("alice"),
-            new GetBalanceResponse.NotFound(),
-            state
-        );
-        Assert.True(valid);
-    }
-
-    [Fact]
-    public void GetBalance_ok_when_account_exists()
-    {
-        var state = new BankState { Accounts = [new Account { Id = "alice", Balance = 75m }] };
-        var spec = BankSpec.Create();
-        var (valid, _, _) = spec.Allows(
-            spec.GetOperation("GetBalance"),
-            new GetBalanceRequest("alice"),
-            new GetBalanceResponse.Ok(75m),
             state
         );
         Assert.True(valid);

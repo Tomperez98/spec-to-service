@@ -46,17 +46,6 @@ public abstract record CloseAccountResponse
     public sealed record NonZeroBalance(decimal Balance) : CloseAccountResponse;
 }
 
-public record GetBalanceRequest(string AccountId);
-
-public abstract record GetBalanceResponse
-{
-    private GetBalanceResponse() { }
-
-    public sealed record Ok(decimal Balance) : GetBalanceResponse;
-
-    public sealed record NotFound : GetBalanceResponse;
-}
-
 public record TransferRequest(string FromAccountId, string ToAccountId, decimal Amount);
 
 public abstract record TransferResponse
