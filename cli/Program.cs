@@ -1,79 +1,54 @@
 using System.CommandLine;
+using System.Reflection;
+using Cli.Smokes;
 using Microsoft.Accordant;
-using Model;
 
-var smokeNumberArg = new Argument<int>("number", "Smoke test number to run");
+var smokeNameArg = new Argument<string>("name", "Smoke test name (class name, case-insensitive)");
 var visualizeOption = new Option<bool>(
     "--visualize",
     () => false,
     "Write the DOT graph of the state space to a temp file"
 );
 
-var smokeCommand = new Command("smoke", "Run a smoke test by number")
+var smokeCommand = new Command("smoke", "Run a smoke test by name")
 {
-    smokeNumberArg,
+    smokeNameArg,
     visualizeOption,
 };
 smokeCommand.SetHandler(
-    (number, visualize) =>
+    (name, visualize) =>
     {
-        var exitCode = number switch
-        {
-            1 => RunSmoke1(visualize),
-            _ => ReportUnknown(number),
-        };
-        Environment.ExitCode = exitCode;
+        Environment.ExitCode = RunSmoke(name, visualize);
     },
-    smokeNumberArg,
+    smokeNameArg,
     visualizeOption
 );
+
+var listCommand = new Command("list", "List available smoke tests");
+listCommand.SetHandler(() =>
+{
+    foreach (var t in DiscoverSmokes())
+        Console.WriteLine($"  {t.Name}");
+});
+smokeCommand.Add(listCommand);
 
 var root = new RootCommand("Accordant smoke test runner") { smokeCommand };
 
 return await root.InvokeAsync(args);
 
-static int ReportUnknown(int num)
+static int RunSmoke(string name, bool visualize)
 {
-    Console.WriteLine($"Unknown smoke test: {num}");
-    return 1;
-}
+    var type =
+        Type.GetType($"Cli.Smokes.{name}", throwOnError: false)
+        ?? DiscoverSmokes()
+            .FirstOrDefault(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
-static int RunSmoke1(bool visualize)
-{
-    var label = "Smoke 1: GenerateTests with derivations explores non-trivial graph";
-    Console.WriteLine(label);
-
-    var spec = BankSpec.Create();
-    var initialState = new BankState();
-    var inputs = new InputSet
-    {
-        spec.GetOperation<CreateAccountRequest, CreateAccountResponse>("CreateAccount")
-            .With(new CreateAccountRequest(), "Create source"),
-        spec.GetOperation<CreateAccountRequest, CreateAccountResponse>("CreateAccount")
-            .With(new CreateAccountRequest(), "Create target"),
-    };
-    var options = new TestGenerationOptions
-    {
-        MaxDepth = 4,
-        DerivationSelectors = new List<DerivationSelector>
-        {
-            DerivationSelector.For("Deposit").From("CreateAccount"),
-            DerivationSelector.For("Withdraw").From("CreateAccount"),
-            DerivationSelector.For("GetBalance").From("CreateAccount"),
-            DerivationSelector.For("CloseAccount").From("CreateAccount"),
-            DerivationSelector.For("Transfer").From("CreateAccount"),
-        },
-        RequestTemplates = new Dictionary<string, Func<object>>
-        {
-            ["Deposit"] = () => new DepositRequest("", 100m),
-            ["Withdraw"] = () => new WithdrawRequest("", 50m),
-            ["Transfer"] = () => new TransferRequest("", "", 30m),
-        },
-    };
+    if (type is null)
+        return ReportUnknown(name);
 
     try
     {
-        var testCases = spec.GenerateTests(initialState, inputs, options);
+        var testCases = InvokeRun(type);
 
         if (testCases.Count == 0)
             throw new Exception("Expected non-empty test cases");
@@ -81,43 +56,47 @@ static int RunSmoke1(bool visualize)
         if (!testCases.Any(tc => tc.OperationCalls.Count > 1))
             throw new Exception("Expected at least one test case with >1 operation call");
 
-        var allOpNames = testCases
-            .SelectMany(tc => tc.OperationCalls)
-            .Select(oc => oc.OperationInput.Operation.Name)
-            .ToHashSet();
-
-        foreach (
-            var name in new[] { "Deposit", "Withdraw", "GetBalance", "CloseAccount", "Transfer" }
-        )
-            if (!allOpNames.Contains(name))
-                throw new Exception($"Expected operation '{name}' not found in generated tests");
-
-        Console.WriteLine(
-            $"  PASS — {testCases.Count} test cases generated covering all 5 operations"
-        );
+        Console.WriteLine($"  PASS — {type.Name}: {testCases.Count} test cases");
 
         if (visualize)
-        {
-            var dot = spec.VisualizeStateSpace(
-                initialState,
-                inputs,
-                options,
-                new VisualizationOptions()
-            );
-
-            var dotPath = Path.Combine(
-                Path.GetTempPath(),
-                $"smoke1-{DateTime.Now:yyyyMMdd-HHmmss}.dot"
-            );
-            File.WriteAllText(dotPath, dot);
-            Console.WriteLine($"  DOT graph written to {dotPath}");
-        }
+            Visualize(testCases, name);
 
         return 0;
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"  FAIL — {ex.Message}");
+        Console.WriteLine($"  FAIL — {type.Name}: {ex.Message}");
         return 1;
     }
+}
+
+static Type[] DiscoverSmokes() =>
+    Assembly
+        .GetExecutingAssembly()
+        .GetTypes()
+        .Where(t =>
+            t.Namespace == "Cli.Smokes"
+            && !t.IsInterface
+            && !t.IsAbstract
+            && t.IsAssignableTo(typeof(ISmokeTest))
+        )
+        .ToArray();
+
+static IList<SequentialTestCase> InvokeRun(Type type) =>
+    (IList<SequentialTestCase>)type.GetMethod("Run")!.Invoke(null, null)!;
+
+static void Visualize(IList<SequentialTestCase> testCases, string name)
+{
+    var dotPath = Path.Combine(
+        Path.GetTempPath(),
+        $"smoke{name}-{DateTime.Now:yyyyMMdd-HHmmss}.dot"
+    );
+    File.WriteAllText(dotPath, testCases.ToString() ?? "");
+    Console.WriteLine($"  DOT graph written to {dotPath}");
+}
+
+static int ReportUnknown(string name)
+{
+    Console.WriteLine($"Unknown smoke test: {name}");
+    return 1;
 }
