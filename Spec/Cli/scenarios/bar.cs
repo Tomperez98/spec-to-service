@@ -39,4 +39,6 @@ public class Bar : ITestScenario
 
     public string VisualizeStateSpace() =>
         _spec.VisualizeStateSpace(new BankState(), _inputs, _options, new VisualizationOptions());
+
+    public Spec<BankState> GetSpec() => _spec;
 }

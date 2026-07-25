@@ -8,7 +8,7 @@ SELECT
 
 -- CreateAccount -> Ok(AccountId). Server generates the id.
 CREATE FUNCTION api.create_account () returns TEXT language plpgsql AS $$
-declare new_id text := uuidv7()::text;
+declare new_id text := gen_random_uuid()::text;
 begin
   insert into data.accounts (id, balance) values (new_id, 0);
   return new_id;
@@ -67,6 +67,7 @@ end $$;
 
 -- Transfer -> Ok(FromNewBalance) | SourceNotFound(404) | TargetNotFound(404)
 --           | SameAccount(400) | InsufficientFunds(400).
+-- Guard order must match the spec: SourceNotFound → TargetNotFound → SameAccount → InsufficientFunds.
 CREATE FUNCTION api.transfer (
   from_account_id TEXT,
   to_account_id TEXT,
@@ -77,19 +78,18 @@ begin
   if amount <= 0 then
     raise exception 'amount must be positive' using errcode = 'PT400';
   end if;
-  if from_account_id = to_account_id then
-    raise exception 'cannot transfer to the same account' using errcode = 'PT400';
-  end if;
-
-  perform 1 from data.accounts
-    where id in (from_account_id, to_account_id) order by id for update;
-
   if not exists (select 1 from data.accounts where id = from_account_id) then
     raise exception 'source account not found' using errcode = 'PT404';
   end if;
   if not exists (select 1 from data.accounts where id = to_account_id) then
     raise exception 'target account not found' using errcode = 'PT404';
   end if;
+  if from_account_id = to_account_id then
+    raise exception 'cannot transfer to the same account' using errcode = 'PT400';
+  end if;
+
+  perform 1 from data.accounts
+    where id in (from_account_id, to_account_id) order by id for update;
 
   update data.accounts a set balance = a.balance - amount
     where a.id = from_account_id and a.balance >= amount

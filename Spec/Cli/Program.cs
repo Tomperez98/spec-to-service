@@ -1,86 +1,131 @@
 using System.CommandLine;
-using System.Reflection;
 using Cli.Scenarios;
+using Cli.Targets;
 using Microsoft.Accordant;
+using Model;
 
-var scenarioNameArg = new Argument<string>("name", "Scenario name (class name, case-insensitive)");
-var visualizeOption = new Option<bool>(
-    "--visualize",
-    () => false,
-    "Write the DOT graph of the state space to a temp file"
-);
+// ── Registration ─────────────────────────────────────────────────────────
 
-var scenarioCommand = new Command("scenario", "Run a test scenario by name")
+var scenarios = new Dictionary<string, ITestScenario>(StringComparer.OrdinalIgnoreCase)
 {
-    scenarioNameArg,
-    visualizeOption,
+    ["Foo"] = new Foo(),
+    ["Bar"] = new Bar(),
 };
-scenarioCommand.SetHandler(
-    (name, visualize) =>
+
+var targets = new Dictionary<string, ITestingTarget>(StringComparer.OrdinalIgnoreCase)
+{
+    ["Server"] = new ServerTarget("http://localhost:3000"),
+};
+
+// ── CLI ──────────────────────────────────────────────────────────────────
+
+var nameArg = new Argument<string>("name", "Scenario name");
+var targetOpt = new Option<string?>("--target", () => null, "Target server, or omit for spec-only validation");
+var visualizeOpt = new Option<bool>("--visualize", () => false, "Write DOT graph to temp file");
+
+var scenarioCmd = new Command("scenario", "Run a test scenario") { nameArg, targetOpt, visualizeOpt };
+scenarioCmd.SetHandler(
+    async (name, target, visualize) =>
     {
-        Environment.ExitCode = RunScenario(name, visualize);
+        if (!scenarios.TryGetValue(name, out var scenario))
+        {
+            Console.WriteLine($"Unknown scenario: {name}. Available: {string.Join(", ", scenarios.Keys)}");
+            Environment.ExitCode = 1;
+            return;
+        }
+
+        ITestingTarget? resolved = null;
+        if (target is not null && !targets.TryGetValue(target, out resolved))
+        {
+            Console.WriteLine($"Unknown target: {target}. Available: {string.Join(", ", targets.Keys)}");
+            Environment.ExitCode = 1;
+            return;
+        }
+
+        Environment.ExitCode = resolved is null
+            ? RunSpecOnly(scenario, visualize)
+            : await RunAgainstTarget(scenario, resolved, visualize);
     },
-    scenarioNameArg,
-    visualizeOption
+    nameArg, targetOpt, visualizeOpt
 );
 
-var listCommand = new Command("list", "List available test scenarios");
-listCommand.SetHandler(() =>
+var listCmd = new Command("list", "List registered scenarios and targets");
+listCmd.SetHandler(() =>
 {
-    foreach (var t in DiscoverScenarios())
-        Console.WriteLine($"  {t.Name}");
+    Console.WriteLine("Scenarios:");
+    foreach (var name in scenarios.Keys) Console.WriteLine($"  {name}");
+    Console.WriteLine("Targets:");
+    foreach (var name in targets.Keys) Console.WriteLine($"  {name}");
 });
-scenarioCommand.Add(listCommand);
+scenarioCmd.Add(listCmd);
 
-var root = new RootCommand("Accordant test scenario runner") { scenarioCommand };
-
+var root = new RootCommand("Accordant test scenario runner") { scenarioCmd };
 return await root.InvokeAsync(args);
 
-static int RunScenario(string name, bool visualize)
+// ── Spec-only ────────────────────────────────────────────────────────────
+
+static int RunSpecOnly(ITestScenario scenario, bool visualize)
 {
-    var type = DiscoverScenarios()
-        .FirstOrDefault(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-
-    if (type is null)
-    {
-        Console.WriteLine($"Unknown scenario: {name}");
-        return 1;
-    }
-
-    var scenario = (ITestScenario)Activator.CreateInstance(type)!;
     var testCases = scenario.GenerateTests();
 
     if (testCases.Count == 0)
         throw new InvalidOperationException("Expected non-empty test cases");
-
     if (!testCases.Any(tc => tc.OperationCalls.Count > 1))
-        throw new InvalidOperationException(
-            "Expected at least one test case with >1 operation call"
-        );
+        throw new InvalidOperationException("Expected at least one test case with >1 operation call");
 
-    Console.WriteLine($"  PASS — {type.Name}: {testCases.Count} test cases");
+    Console.WriteLine($"  PASS — {scenario.GetType().Name}: {testCases.Count} test cases");
 
     if (visualize)
-    {
-        var dotPath = Path.Combine(
-            Path.GetTempPath(),
-            $"scenario-{name}-{DateTime.Now:yyyyMMdd-HHmmss}.dot"
-        );
-        File.WriteAllText(dotPath, scenario.VisualizeStateSpace());
-        Console.WriteLine($"  DOT graph written to {dotPath}");
-    }
+        WriteDot(scenario);
 
     return 0;
 }
 
-static Type[] DiscoverScenarios() =>
-    Assembly
-        .GetExecutingAssembly()
-        .GetTypes()
-        .Where(t =>
-            t.Namespace == "Cli.Scenarios"
-            && !t.IsInterface
-            && !t.IsAbstract
-            && t.IsAssignableTo(typeof(ITestScenario))
-        )
-        .ToArray();
+// ── Live execution ───────────────────────────────────────────────────────
+
+static async Task<int> RunAgainstTarget(ITestScenario scenario, ITestingTarget target, bool visualize)
+{
+    var spec = scenario.GetSpec();
+    var testCases = scenario.GenerateTests();
+    Console.WriteLine($"  {testCases.Count} test cases");
+
+    var context = spec.CreateTestingContext();
+    target.Bind(spec, context);
+
+    Console.WriteLine($"Running tests against {target.Name}...");
+    var results = await spec.RunTests(context, new BankState(), testCases,
+        new TestExecutionOptions
+        {
+            StopOnFirstFailure = false,
+            BeforeEachAsync = _ => target.ResetAsync(),
+        });
+
+    var failures = results.Where(r => !r.Success).ToList();
+    Console.WriteLine();
+    Console.WriteLine($"Results: {results.Count - failures.Count} passed, {failures.Count} failed (of {results.Count} total)");
+
+    foreach (var f in failures.Take(10))
+    {
+        Console.WriteLine($"  FAIL: {f.LastFailureMessage}");
+        if (f.LogFilePath is not null) Console.WriteLine($"    Log: {f.LogFilePath}");
+    }
+    if (failures.Count > 10)
+        Console.WriteLine($"  ... and {failures.Count - 10} more");
+
+    if (visualize)
+        WriteDot(scenario);
+
+    return failures.Count > 0 ? 1 : 0;
+}
+
+// ── Visualize ────────────────────────────────────────────────────────────
+
+static void WriteDot(ITestScenario scenario)
+{
+    var dotPath = Path.Combine(
+        Path.GetTempPath(),
+        $"scenario-{scenario.GetType().Name}-{DateTime.Now:yyyyMMdd-HHmmss}.dot"
+    );
+    File.WriteAllText(dotPath, scenario.VisualizeStateSpace());
+    Console.WriteLine($"  DOT graph written to {dotPath}");
+}
