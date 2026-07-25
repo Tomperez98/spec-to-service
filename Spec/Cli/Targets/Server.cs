@@ -13,11 +13,8 @@ public class ServerTarget : ITestingTarget
 {
     private readonly BankApiClient _client;
 
-    public string Name { get; }
-
     public ServerTarget(string url)
     {
-        Name = url;
         _client = new BankApiClient(new HttpClient { BaseAddress = new Uri(url) });
     }
 
@@ -48,19 +45,21 @@ public class BankApiClient
         spec.ExecuteWith<BankApiClient>()
             .BindAsync<CreateAccountRequest, CreateAccountResponse>(
                 "CreateAccount",
-                (c, req) => c.CreateAccountAsync(req))
-            .BindAsync<DepositRequest, DepositResponse>(
-                "Deposit",
-                (c, req) => c.DepositAsync(req))
+                (c, req) => c.CreateAccountAsync(req)
+            )
+            .BindAsync<DepositRequest, DepositResponse>("Deposit", (c, req) => c.DepositAsync(req))
             .BindAsync<WithdrawRequest, WithdrawResponse>(
                 "Withdraw",
-                (c, req) => c.WithdrawAsync(req))
+                (c, req) => c.WithdrawAsync(req)
+            )
             .BindAsync<TransferRequest, TransferResponse>(
                 "Transfer",
-                (c, req) => c.TransferAsync(req))
+                (c, req) => c.TransferAsync(req)
+            )
             .BindAsync<CloseAccountRequest, CloseAccountResponse>(
                 "CloseAccount",
-                (c, req) => c.CloseAccountAsync(req));
+                (c, req) => c.CloseAccountAsync(req)
+            );
     }
 
     public async Task<CreateAccountResponse> CreateAccountAsync(CreateAccountRequest _)
@@ -70,7 +69,8 @@ public class BankApiClient
         {
             var err = await ParseError(response);
             throw new InvalidOperationException(
-                $"CreateAccount failed: {err.Message} (HTTP {(int)response.StatusCode})");
+                $"CreateAccount failed: {err.Message} (HTTP {(int)response.StatusCode})"
+            );
         }
 
         var id = (await response.Content.ReadFromJsonAsync<string>())!;
@@ -79,11 +79,10 @@ public class BankApiClient
 
     public async Task<DepositResponse> DepositAsync(DepositRequest req)
     {
-        var response = await _http.PostAsJsonAsync("/rpc/deposit", new
-        {
-            account_id = req.AccountId,
-            amount = req.Amount,
-        });
+        var response = await _http.PostAsJsonAsync(
+            "/rpc/deposit",
+            new { account_id = req.AccountId, amount = req.Amount }
+        );
 
         if (response.IsSuccessStatusCode)
             return new DepositResponse.Ok(await ReadDecimal(response));
@@ -93,17 +92,17 @@ public class BankApiClient
         {
             "PT404" => new DepositResponse.NotFound(),
             _ => throw new InvalidOperationException(
-                $"Deposit: unexpected error {err.Code}: {err.Message}"),
+                $"Deposit: unexpected error {err.Code}: {err.Message}"
+            ),
         };
     }
 
     public async Task<WithdrawResponse> WithdrawAsync(WithdrawRequest req)
     {
-        var response = await _http.PostAsJsonAsync("/rpc/withdraw", new
-        {
-            account_id = req.AccountId,
-            amount = req.Amount,
-        });
+        var response = await _http.PostAsJsonAsync(
+            "/rpc/withdraw",
+            new { account_id = req.AccountId, amount = req.Amount }
+        );
 
         if (response.IsSuccessStatusCode)
             return new WithdrawResponse.Ok(await ReadDecimal(response));
@@ -112,20 +111,25 @@ public class BankApiClient
         return err.Code switch
         {
             "PT404" => new WithdrawResponse.NotFound(),
-            "PT400" when err.Message.Contains("insufficient funds") => new WithdrawResponse.InsufficientFunds(),
+            "PT400" when err.Message.Contains("insufficient funds") =>
+                new WithdrawResponse.InsufficientFunds(),
             _ => throw new InvalidOperationException(
-                $"Withdraw: unexpected error {err.Code}: {err.Message}"),
+                $"Withdraw: unexpected error {err.Code}: {err.Message}"
+            ),
         };
     }
 
     public async Task<TransferResponse> TransferAsync(TransferRequest req)
     {
-        var response = await _http.PostAsJsonAsync("/rpc/transfer", new
-        {
-            from_account_id = req.FromAccountId,
-            to_account_id = req.ToAccountId,
-            amount = req.Amount,
-        });
+        var response = await _http.PostAsJsonAsync(
+            "/rpc/transfer",
+            new
+            {
+                from_account_id = req.FromAccountId,
+                to_account_id = req.ToAccountId,
+                amount = req.Amount,
+            }
+        );
 
         if (response.IsSuccessStatusCode)
             return new TransferResponse.Ok(await ReadDecimal(response));
@@ -136,18 +140,20 @@ public class BankApiClient
             "PT404" when err.Message.Contains("source") => new TransferResponse.SourceNotFound(),
             "PT404" when err.Message.Contains("target") => new TransferResponse.TargetNotFound(),
             "PT400" when err.Message.Contains("same account") => new TransferResponse.SameAccount(),
-            "PT400" when err.Message.Contains("insufficient funds") => new TransferResponse.InsufficientFunds(),
+            "PT400" when err.Message.Contains("insufficient funds") =>
+                new TransferResponse.InsufficientFunds(),
             _ => throw new InvalidOperationException(
-                $"Transfer: unexpected error {err.Code}: {err.Message}"),
+                $"Transfer: unexpected error {err.Code}: {err.Message}"
+            ),
         };
     }
 
     public async Task<CloseAccountResponse> CloseAccountAsync(CloseAccountRequest req)
     {
-        var response = await _http.PostAsJsonAsync("/rpc/close_account", new
-        {
-            account_id = req.AccountId,
-        });
+        var response = await _http.PostAsJsonAsync(
+            "/rpc/close_account",
+            new { account_id = req.AccountId }
+        );
 
         if (response.IsSuccessStatusCode)
             return new CloseAccountResponse.Ok();
@@ -158,7 +164,8 @@ public class BankApiClient
             "PT404" => new CloseAccountResponse.NotFound(),
             "PT409" => ParseNonZeroBalance(err.Message),
             _ => throw new InvalidOperationException(
-                $"CloseAccount: unexpected error {err.Code}: {err.Message}"),
+                $"CloseAccount: unexpected error {err.Code}: {err.Message}"
+            ),
         };
     }
 
@@ -182,16 +189,12 @@ public class BankApiClient
             {
                 if (acct.Balance > 0)
                 {
-                    await _http.PostAsJsonAsync("/rpc/withdraw", new
-                    {
-                        account_id = acct.Id,
-                        amount = acct.Balance,
-                    });
+                    await _http.PostAsJsonAsync(
+                        "/rpc/withdraw",
+                        new { account_id = acct.Id, amount = acct.Balance }
+                    );
                 }
-                await _http.PostAsJsonAsync("/rpc/close_account", new
-                {
-                    account_id = acct.Id,
-                });
+                await _http.PostAsJsonAsync("/rpc/close_account", new { account_id = acct.Id });
             }
             catch
             {
@@ -223,7 +226,7 @@ public class BankApiClient
     {
         var body = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<PostgrestError>(body, _errorJsonOptions)
-               ?? new PostgrestError { Code = "UNKNOWN", Message = body };
+            ?? new PostgrestError { Code = "UNKNOWN", Message = body };
     }
 
     private class PostgrestError

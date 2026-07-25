@@ -8,7 +8,6 @@ namespace Cli.Targets;
 /// </summary>
 public interface ITestingTarget
 {
-    string Name { get; }
     Task ResetAsync();
     void Bind(Spec<BankState> spec, TestingContext context);
 }

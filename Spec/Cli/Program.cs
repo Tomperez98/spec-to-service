@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Diagnostics;
 using Cli.Scenarios;
 using Cli.Targets;
 using Microsoft.Accordant;
@@ -20,16 +21,27 @@ var targets = new Dictionary<string, ITestingTarget>(StringComparer.OrdinalIgnor
 // ── CLI ──────────────────────────────────────────────────────────────────
 
 var nameArg = new Argument<string>("name", "Scenario name");
-var targetOpt = new Option<string?>("--target", () => null, "Target server, or omit for spec-only validation");
+var targetOpt = new Option<string?>(
+    "--target",
+    () => null,
+    "Target server, or omit for spec-only validation"
+);
 var visualizeOpt = new Option<bool>("--visualize", () => false, "Write DOT graph to temp file");
 
-var scenarioCmd = new Command("scenario", "Run a test scenario") { nameArg, targetOpt, visualizeOpt };
+var scenarioCmd = new Command("scenario", "Run a test scenario")
+{
+    nameArg,
+    targetOpt,
+    visualizeOpt,
+};
 scenarioCmd.SetHandler(
     async (name, target, visualize) =>
     {
         if (!scenarios.TryGetValue(name, out var scenario))
         {
-            Console.WriteLine($"Unknown scenario: {name}. Available: {string.Join(", ", scenarios.Keys)}");
+            Console.WriteLine(
+                $"Unknown scenario: {name}. Available: {string.Join(", ", scenarios.Keys)}"
+            );
             Environment.ExitCode = 1;
             return;
         }
@@ -37,25 +49,37 @@ scenarioCmd.SetHandler(
         ITestingTarget? resolved = null;
         if (target is not null && !targets.TryGetValue(target, out resolved))
         {
-            Console.WriteLine($"Unknown target: {target}. Available: {string.Join(", ", targets.Keys)}");
+            Console.WriteLine(
+                $"Unknown target: {target}. Available: {string.Join(", ", targets.Keys)}"
+            );
             Environment.ExitCode = 1;
             return;
         }
 
-        Environment.ExitCode = resolved is null
-            ? RunSpecOnly(scenario, visualize)
-            : await RunAgainstTarget(scenario, resolved, visualize);
+        if (resolved is null)
+        {
+            Environment.ExitCode = RunSpecOnly(scenario, visualize);
+        }
+        else
+        {
+            Debug.Assert(target is not null, "target must exist.");
+            Environment.ExitCode = await RunAgainstTarget(scenario, target, resolved, visualize);
+        }
     },
-    nameArg, targetOpt, visualizeOpt
+    nameArg,
+    targetOpt,
+    visualizeOpt
 );
 
 var listCmd = new Command("list", "List registered scenarios and targets");
 listCmd.SetHandler(() =>
 {
     Console.WriteLine("Scenarios:");
-    foreach (var name in scenarios.Keys) Console.WriteLine($"  {name}");
+    foreach (var name in scenarios.Keys)
+        Console.WriteLine($"  {name}");
     Console.WriteLine("Targets:");
-    foreach (var name in targets.Keys) Console.WriteLine($"  {name}");
+    foreach (var name in targets.Keys)
+        Console.WriteLine($"  {name}");
 });
 scenarioCmd.Add(listCmd);
 
@@ -71,7 +95,9 @@ static int RunSpecOnly(ITestScenario scenario, bool visualize)
     if (testCases.Count == 0)
         throw new InvalidOperationException("Expected non-empty test cases");
     if (!testCases.Any(tc => tc.OperationCalls.Count > 1))
-        throw new InvalidOperationException("Expected at least one test case with >1 operation call");
+        throw new InvalidOperationException(
+            "Expected at least one test case with >1 operation call"
+        );
 
     Console.WriteLine($"  PASS — {scenario.GetType().Name}: {testCases.Count} test cases");
 
@@ -83,7 +109,12 @@ static int RunSpecOnly(ITestScenario scenario, bool visualize)
 
 // ── Live execution ───────────────────────────────────────────────────────
 
-static async Task<int> RunAgainstTarget(ITestScenario scenario, ITestingTarget target, bool visualize)
+static async Task<int> RunAgainstTarget(
+    ITestScenario scenario,
+    string name,
+    ITestingTarget target,
+    bool visualize
+)
 {
     var spec = scenario.GetSpec();
     var testCases = scenario.GenerateTests();
@@ -92,22 +123,29 @@ static async Task<int> RunAgainstTarget(ITestScenario scenario, ITestingTarget t
     var context = spec.CreateTestingContext();
     target.Bind(spec, context);
 
-    Console.WriteLine($"Running tests against {target.Name}...");
-    var results = await spec.RunTests(context, new BankState(), testCases,
+    Console.WriteLine($"Running tests against {name}...");
+    var results = await spec.RunTests(
+        context,
+        new BankState(),
+        testCases,
         new TestExecutionOptions
         {
             StopOnFirstFailure = false,
-            BeforeEachAsync = _ => target.ResetAsync(),
-        });
+            // BeforeEachAsync = _ => target.ResetAsync(),
+        }
+    );
 
     var failures = results.Where(r => !r.Success).ToList();
     Console.WriteLine();
-    Console.WriteLine($"Results: {results.Count - failures.Count} passed, {failures.Count} failed (of {results.Count} total)");
+    Console.WriteLine(
+        $"Results: {results.Count - failures.Count} passed, {failures.Count} failed (of {results.Count} total)"
+    );
 
     foreach (var f in failures.Take(10))
     {
         Console.WriteLine($"  FAIL: {f.LastFailureMessage}");
-        if (f.LogFilePath is not null) Console.WriteLine($"    Log: {f.LogFilePath}");
+        if (f.LogFilePath is not null)
+            Console.WriteLine($"    Log: {f.LogFilePath}");
     }
     if (failures.Count > 10)
         Console.WriteLine($"  ... and {failures.Count - 10} more");
