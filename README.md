@@ -6,6 +6,24 @@ A workflow that flips development: define an executable behavioral specification
 
 Powered by [Microsoft Accordant](https://github.com/microsoft/accordant).
 
+## How to Run
+
+```bash
+# Start Postgres
+docker run --rm -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16
+
+# Run migrations
+bun run db:migrate
+
+# Start PostgREST
+DATABASE_URL="postgres://postgres:postgres@localhost:5432/postgres" \
+  PGRST_DB_ANON_ROLE="postgres" \
+  postgrest postgrest.conf
+
+# Run spec tests against the server
+dotnet run --project Spec/Cli -- scenario Foo --target server
+```
+
 ## Project Structure
 
 ```
