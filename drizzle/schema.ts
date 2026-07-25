@@ -6,9 +6,11 @@ export const dataSchema = pgSchema("data");
 
 export const accounts = dataSchema.table("accounts", {
   id: varchar("id").primaryKey(),
+  balance: decimal("balance").notNull().default("0"),
 });
 
 // Public contract — views + functions only. This is all PostgREST sees.
+
 export const apiSchema = pgSchema("api");
 
 export const accountBalances = apiSchema.view("account_balances", {

@@ -1,16 +1,21 @@
+CREATE ROLE web_anon nologin;
+
+GRANT usage ON schema api TO web_anon;
+
+GRANT
+SELECT
+  ON api.account_balances TO web_anon;
+
 -- CreateAccount -> Ok(AccountId). Server generates the id.
-create function api.create_account()
-returns text language plpgsql as $$
-declare new_id text := gen_random_uuid()::text;
+CREATE FUNCTION api.create_account () returns TEXT language plpgsql AS $$
+declare new_id text := uuidv7()::text;
 begin
   insert into data.accounts (id, balance) values (new_id, 0);
   return new_id;
 end $$;
---> statement-breakpoint
 
 -- Deposit -> Ok(NewBalance) | NotFound(404).
-create function api.deposit(account_id text, amount numeric)
-returns numeric language plpgsql as $$
+CREATE FUNCTION api.deposit (account_id TEXT, amount NUMERIC) returns NUMERIC language plpgsql AS $$
 declare new_balance numeric;
 begin
   if amount <= 0 then
@@ -24,11 +29,9 @@ begin
   end if;
   return new_balance;
 end $$;
---> statement-breakpoint
 
 -- Withdraw -> Ok(NewBalance) | NotFound(404) | InsufficientFunds(400).
-create function api.withdraw(account_id text, amount numeric)
-returns numeric language plpgsql as $$
+CREATE FUNCTION api.withdraw (account_id TEXT, amount NUMERIC) returns NUMERIC language plpgsql AS $$
 declare new_balance numeric;
 begin
   if amount <= 0 then
@@ -46,11 +49,9 @@ begin
     raise exception 'account not found' using errcode = 'PT404';
   end if;
 end $$;
---> statement-breakpoint
 
 -- CloseAccount -> Ok | NotFound(404) | NonZeroBalance(409).
-create function api.close_account(account_id text)
-returns void language plpgsql as $$
+CREATE FUNCTION api.close_account (account_id TEXT) returns void language plpgsql AS $$
 declare current_balance numeric;
 begin
   select balance into current_balance from data.accounts where id = account_id for update;
@@ -63,12 +64,14 @@ begin
   end if;
   delete from data.accounts where id = account_id;
 end $$;
---> statement-breakpoint
 
 -- Transfer -> Ok(FromNewBalance) | SourceNotFound(404) | TargetNotFound(404)
 --           | SameAccount(400) | InsufficientFunds(400).
-create function api.transfer(from_account_id text, to_account_id text, amount numeric)
-returns numeric language plpgsql as $$
+CREATE FUNCTION api.transfer (
+  from_account_id TEXT,
+  to_account_id TEXT,
+  amount NUMERIC
+) returns NUMERIC language plpgsql AS $$
 declare from_balance numeric;
 begin
   if amount <= 0 then
@@ -98,17 +101,18 @@ begin
   update data.accounts set balance = balance + amount where id = to_account_id;
   return from_balance;
 end $$;
---> statement-breakpoint
 
 -- Expose read path
-grant usage on schema api to web_anon;
-grant select on api.account_balances to web_anon;
+GRANT usage ON schema api TO web_anon;
+
+GRANT
+SELECT
+  ON api.account_balances TO web_anon;
 
 -- Expose write path
-grant execute on function
-  api.create_account(),
-  api.deposit(text, numeric),
-  api.withdraw(text, numeric),
-  api.close_account(text),
-  api.transfer(text, text, numeric)
-to web_anon;
+GRANT
+EXECUTE ON function api.create_account (),
+api.deposit (TEXT, NUMERIC),
+api.withdraw (TEXT, NUMERIC),
+api.close_account (TEXT),
+api.transfer (TEXT, TEXT, NUMERIC) TO web_anon;
