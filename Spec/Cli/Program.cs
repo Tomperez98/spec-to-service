@@ -131,7 +131,7 @@ static async Task<int> RunAgainstTarget(
         new TestExecutionOptions
         {
             StopOnFirstFailure = false,
-            // BeforeEachAsync = _ => target.ResetAsync(),
+            BeforeEachAsync = _ => target.ResetAsync(),
         }
     );
 

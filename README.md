@@ -18,10 +18,13 @@ Powered by [Microsoft Accordant](https://github.com/microsoft/accordant).
 │   ├── Cli/                # CLI entry point (references Model)
 │   │   ├── Cli.csproj
 │   │   ├── Program.cs
-│   │   ├── ITestScenario.cs    # Test scenario interface
-│   │   └── Scenarios/      # Test scenario implementations
-│   │       ├── Foo.cs
-│   │       └── Bar.cs
+│   │   ├── Scenarios/      # Test scenario implementations
+│   │   │   ├── ITestScenario.cs
+│   │   │   ├── Foo.cs
+│   │   │   └── Bar.cs
+│   │   └── Targets/        # Target adapters for live testing
+│   │       ├── ITestingTarget.cs
+│   │       └── Server.cs   # ServerTarget (HTTP)
 │   └── Tests/              # Unit tests
 │       ├── Tests.csproj
 │       └── UnitTests.cs
@@ -62,18 +65,57 @@ spec.Operation<WithdrawRequest, WithdrawResponse>("Withdraw", (req, state) =>
 });
 ```
 
-## Getting Started
+## CLI Usage
 
 ```bash
-# Restore dependencies
+# Restore & build
 dotnet restore
-
-# Build
 dotnet build
 
-# Run CLI
-dotnet run --project Spec/Cli
+# List registered scenarios and targets
+dotnet run --project Spec/Cli scenario list
+
+# Validate a scenario against the spec only (no live server)
+dotnet run --project Spec/Cli scenario Foo
+dotnet run --project Spec/Cli scenario Bar
+
+# Run a scenario against a live server
+dotnet run --project Spec/Cli scenario Foo --target Server
+
+# Generate a DOT state-space graph
+dotnet run --project Spec/Cli scenario Foo --visualize
 ```
+
+### Adding a scenario
+
+Implement `ITestScenario` and register it in `Program.cs`:
+
+```csharp
+var scenarios = new Dictionary<string, ITestScenario>(StringComparer.OrdinalIgnoreCase)
+{
+    ["Foo"] = new Foo(),
+    ["Bar"] = new Bar(),
+};
+```
+
+### Adding a target
+
+Implement `ITestingTarget` (e.g. `ServerTarget`) and register it:
+
+```csharp
+var targets = new Dictionary<string, ITestingTarget>(StringComparer.OrdinalIgnoreCase)
+{
+    ["Server"] = new ServerTarget("http://localhost:3000"),
+};
+```
+
+## How it works
+
+1. **Spec-only** (`scenario Foo`) — generates test cases from the scenario, validates that each operation's spec rules produce the expected outcomes against `BankState`. Catches spec bugs without a running service.
+
+2. **Live testing** (`scenario Foo --target Server`) — binds spec operations to HTTP endpoints via `ITestingTarget`, runs the same test cases against a real server, and reports pass/fail with log paths for failures.
+
+3. **Visualize** (`--visualize`) — writes a DOT graph of the scenario's state space to a temp file, useful for debugging spec transitions.
 
 ## Resources
 
