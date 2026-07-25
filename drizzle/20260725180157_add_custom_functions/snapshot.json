@@ -1,0 +1,72 @@
+{
+  "id": "15d544b6-9be3-4c5b-8de4-4e9cd808eeee",
+  "prevIds": [
+    "77acb060-ecc7-4aaf-b7d3-156e55d25d9a"
+  ],
+  "version": "8",
+  "dialect": "postgres",
+  "ddl": [
+    {
+      "name": "api",
+      "entityType": "schemas"
+    },
+    {
+      "name": "data",
+      "entityType": "schemas"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "accounts",
+      "entityType": "tables",
+      "schema": "data"
+    },
+    {
+      "type": "varchar",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "data",
+      "table": "accounts"
+    },
+    {
+      "type": "numeric",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'0'",
+      "generated": null,
+      "identity": null,
+      "name": "balance",
+      "entityType": "columns",
+      "schema": "data",
+      "table": "accounts"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "accounts_pkey",
+      "schema": "data",
+      "table": "accounts",
+      "entityType": "pks"
+    },
+    {
+      "definition": "SELECT id, balance FROM data.accounts",
+      "with": null,
+      "withNoData": null,
+      "using": null,
+      "tablespace": null,
+      "materialized": false,
+      "name": "account_balances",
+      "entityType": "views",
+      "schema": "api"
+    }
+  ],
+  "renames": []
+}
